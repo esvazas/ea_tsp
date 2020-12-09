@@ -15,15 +15,16 @@ BIG_VALUE = 1.7976931348623157e+300
 # Modify the class name to match your student number.
 class r0769473:
     k = 5  # k tournament size
-    mutation_probability = 0.75  # mutation probability
+    mutation_probability = 0.75     # mutation probability
+    init_mutation_prob = 0.05       # initial mutation probability
     n = 10
 
     # Convergence parameters
-    conv_tolerance = 1e-5  # convergence tolerance
+    conv_tolerance = 1e-6  # convergence tolerance
     conv_el = 5  # elements to consider for checking
     max_iterations = 100  # max iterations until stop
 
-    def __init__(self, mu=250, lam=1500, report_memory=False, create_convergence_plot=False,
+    def __init__(self, mu=250, lam=1250, report_memory=False, create_convergence_plot=False,
                  create_div_plot=False):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
         self.mem_recording = report_memory
@@ -42,7 +43,14 @@ class r0769473:
         self.n = distanceMatrix.shape[0]  # number of cities
         i = 0
         obj_values = [0] * self.conv_el
+
+        # Create init population and mutation/recombination probabilities
         population = self.initialization()
+
+        # Evaluation of initial population
+        population_fitnesses = [self.fitness(distanceMatrix, i) for i in population]
+        meanObjective = np.mean(population_fitnesses)
+        bestObjective = np.min(population_fitnesses)
 
         if self.convergency_plot:
             mean_objectives = []
@@ -61,26 +69,33 @@ class r0769473:
             print(i)
 
             # Your code here.
+            # Initialize offspring population
             offspring = np.empty([self.offspring_size, self.n], dtype=np.uint16)
+
+            # Compute adaptive recombination and mutation parameters
+            rec_list = []
+            mut_list = []
             for j in range(0, self.offspring_size - 1, 2):
-
-                # Original selection and recombination
-                #parent1 = self.selection(distanceMatrix, population)
-                #parent2 = self.selection(distanceMatrix, population)
-                #child1, child2 = self.recombination(parent1, parent2)
-                #offspring[j] = child1
-                #offspring[j + 1] = child2
-
-                # SCX selection and recombination
                 for scx_i in range(2):
                     parent1 = self.selection(distanceMatrix, population)
                     parent2 = self.selection(distanceMatrix, population)
-                    #offspring[j+scx_i] = self.recombination_scx(parent1, parent2, distanceMatrix)
-                    offspring[j+scx_i] = self.recombination_hgrex(parent1, parent2, distanceMatrix)
+                    rec_prob = self.get_recombination_prob(meanObjective, bestObjective, min(
+                        self.fitness(distanceMatrix, parent1), self.fitness(distanceMatrix, parent2)))
+                    rec_list.append(rec_prob)
+                    if random.random() < rec_prob:
+                        offspring[j+scx_i] = self.recombination_hgrex(parent1, parent2, distanceMatrix)
+                    else:
+                        offspring[j+scx_i] = parent1
+
 
             for k in range(len(offspring)):
-                if random.random() < self.mutation_probability:
+                mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
+                mut_list.append(mut_prob)
+                if random.random() < mut_prob:
                     offspring[k] = self.mutation(offspring[k])
+
+            print("Recombination probability (average): ", np.mean(rec_list))
+            print("Mutation probability (average): ", np.mean(mut_list))
 
             population_before_elimination = np.concatenate((population, offspring), axis=0)
             population = self.elimination(distanceMatrix, population_before_elimination)
@@ -161,6 +176,20 @@ class r0769473:
         if isinf(a):
             return BIG_VALUE
         return sum(dist)
+
+    def get_mutation_prob(self, f_avg, f_max, f, mut1=0.1, mut2=0.01):
+        if f <= f_avg:
+            mut_prob = mut1 - ((mut1 - mut2) * (f - f_max) / (f_avg-f_max))
+        else:
+            mut_prob = mut1
+        return mut_prob
+
+    def get_recombination_prob(self, f_avg, f_max, f, rec1=0.7, rec2=0.3):
+        if f <= f_avg:
+            rec_prob = rec1 - ((rec1 - rec2) * (f_avg-f) / (f_avg-f_max))
+        else:
+            rec_prob = rec1
+        return rec_prob
 
     def initialization(self):
         '''
