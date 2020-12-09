@@ -14,16 +14,16 @@ BIG_VALUE = 1.7976931348623157e+300
 
 # Modify the class name to match your student number.
 class r0769473:
-    k = 15  # k tournament size
-    mutation_probability = 0.5  # mutation probability
+    k = 5  # k tournament size
+    mutation_probability = 0.75  # mutation probability
     n = 10
 
     # Convergence parameters
     conv_tolerance = 1e-5  # convergence tolerance
     conv_el = 5  # elements to consider for checking
-    max_iterations = 500  # max iterations until stop
+    max_iterations = 100  # max iterations until stop
 
-    def __init__(self, mu=500, lam=2500, report_memory=False, create_convergence_plot=False,
+    def __init__(self, mu=250, lam=1500, report_memory=False, create_convergence_plot=False,
                  create_div_plot=False):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
         self.mem_recording = report_memory
@@ -75,7 +75,8 @@ class r0769473:
                 for scx_i in range(2):
                     parent1 = self.selection(distanceMatrix, population)
                     parent2 = self.selection(distanceMatrix, population)
-                    offspring[j+scx_i] = self.recombination_scx(parent1, parent2, distanceMatrix)
+                    #offspring[j+scx_i] = self.recombination_scx(parent1, parent2, distanceMatrix)
+                    offspring[j+scx_i] = self.recombination_hgrex(parent1, parent2, distanceMatrix)
 
             for k in range(len(offspring)):
                 if random.random() < self.mutation_probability:
@@ -269,6 +270,48 @@ class r0769473:
                 chromo.append(gene22)
         return np.array(chromo)
 
+    def recombination_hgrex(self, parent1, parent2, cost_matrix):
+        chromo = list()
+        rand_idx = np.random.randint(0, self.n - 1)
+        chromo.append(parent1[rand_idx])
+        chromo_seq = list(set(list(range(self.n))) - set(chromo))
+        for i in range(self.n - 1):
+            gene1 = chromo[i]
+            # Find gene1 indices in parents
+            idx1 = np.where(parent1 == gene1)[0][0]
+            idx2 = np.where(parent2 == gene1)[0][0]
+
+            if idx1 >= parent1.size - 1:
+                gene21 = parent1[0]
+            else:
+                gene21 = parent1[idx1 + 1]
+
+            if idx2 >= parent2.size - 1:
+                gene22 = parent2[0]
+            else:
+                gene22 = parent2[idx2 + 1]
+
+            if gene21 == gene22 and gene21 not in chromo:
+                chromo.append(gene21)
+            elif gene21 in chromo and gene22 in chromo:
+                gene2_diff = list(set(chromo_seq) - set(chromo))
+                cost2 = [cost_matrix[gene1, g2] for g2 in gene2_diff]
+                chromo.append(gene2_diff[cost2.index(min(cost2))])
+                continue
+            elif gene21 in chromo and gene22 not in chromo:
+                chromo.append(gene22)
+                continue
+            elif gene21 not in chromo and gene22 in chromo:
+                chromo.append(gene21)
+                continue
+            else: # Compare cost for (gene1,gene21) and (gene1,gene22)
+                cost1 = cost_matrix[gene1, gene21]
+                cost2 = cost_matrix[gene1, gene22]
+                if cost1 <= cost2:
+                    chromo.append(gene21)
+                elif cost1 > cost2:
+                    chromo.append(gene22)
+        return np.array(chromo)
 
     # (l+m)-elimination
     # returns a new population with only the survivors
@@ -308,7 +351,7 @@ get_avg_iterations = True
 get_avg_time = True
 get_max_memory = True
 plot_variance = False
-tour_file = "../tour100.csv"
+tour_file = "../tour194.csv"
 create_convergence_plot = False
 create_div_plot = False
 
