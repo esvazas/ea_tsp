@@ -3,6 +3,7 @@ import datetime
 import time
 import psutil
 import random
+from tqdm import tqdm
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,7 +28,7 @@ class r0769473:
     conv_el = 5  # elements to consider for checking
     max_iterations = 50  # max iterations until stop
 
-    def __init__(self, mu=2000, lam=400, report_memory=False, create_convergence_plot=False,
+    def __init__(self, mu=500, lam=100, report_memory=False, create_convergence_plot=False,
                  create_div_plot=False):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
         self.mem_recording = report_memory
@@ -55,6 +56,22 @@ class r0769473:
         population_fitnesses = [self.fitness(distanceMatrix, i) for i in population]
         meanObjective = np.mean(population_fitnesses)
         bestObjective = np.min(population_fitnesses)
+        print(population.shape)
+        print("Mean objective: " + str(meanObjective))
+        print("Best objective: " + str(bestObjective))
+
+        start_time = time.time()
+        pop_idx = np.random.choice(population.shape[0], min(self.population_size, 100), replace=False)
+        population[pop_idx] = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(population[pop_idx])], dtype=np.uint16)
+        print("2-opt required time: ", time.time() - start_time, population.shape)
+
+        # Evaluation of population after k-opt local search
+        population_fitnesses = [self.fitness(distanceMatrix, i) for i in population]
+        meanObjective = np.mean(population_fitnesses)
+        bestObjective = np.min(population_fitnesses)
+        print(population.shape)
+        print("Mean objective: " + str(meanObjective))
+        print("Best objective: " + str(bestObjective))
 
         if self.convergency_plot:
             mean_objectives = []
@@ -80,21 +97,37 @@ class r0769473:
             rec_list = []
             mut_list = []
             for j in range(0, self.offspring_size - 1, 2):
-                for scx_i in range(2):
+                #parent1 = self.selection(distanceMatrix, population)
+                #parent2 = self.selection(distanceMatrix, population)
+                #rec_prob = self.get_recombination_prob(meanObjective, bestObjective, min(
+                #    self.fitness(distanceMatrix, parent1), self.fitness(distanceMatrix, parent2)))
+                #rec_list.append(rec_prob)
+                #child1, child2 = self.recombination(parent1, parent2)
+                #offspring[j] = child1
+                #offspring[j+1] = child2
+
+                for rec_i in range(2):
                     parent1 = self.selection(distanceMatrix, population)
                     parent2 = self.selection(distanceMatrix, population)
                     rec_prob = self.get_recombination_prob(meanObjective, bestObjective, min(
                         self.fitness(distanceMatrix, parent1), self.fitness(distanceMatrix, parent2)))
                     rec_list.append(rec_prob)
                     if random.random() < rec_prob:
-                        offspring[j+scx_i] = self.recombination_hgrex(parent1, parent2, distanceMatrix)
+                        offspring[j+rec_i] = self.recombination_hgrex(parent1, parent2, distanceMatrix)
+                        #offspring[j+rec_i] = self.recombination_scx(parent1, parent2, distanceMatrix)
                     else:
-                        offspring[j+scx_i] = parent1
+                        #child1, _ = self.recombination(parent1, parent2)
+                        offspring[j+rec_i] = parent1 if self.fitness(distanceMatrix, parent1) <= self.fitness(distanceMatrix, parent2) else parent2
 
+            # Apply 2-opt for local search
+            start_time = time.time()
+            off_idx = np.random.choice(offspring.shape[0], min(self.offspring_size, 50) , replace=False)
+            offspring[off_idx] = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(offspring[off_idx])], dtype=np.uint16)
+            print("2-opt required time: ", time.time() - start_time, population.shape)
 
             for k in range(len(offspring)):
-                #mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
-                mut_prob = self.get_mutation_prob(i)
+                mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
+                #mut_prob = self.get_mutation_prob(i)
                 mut_list.append(mut_prob)
                 if random.random() < mut_prob:
                     offspring[k] = self.mutation(offspring[k])
@@ -102,11 +135,20 @@ class r0769473:
             print("Recombination probability (average): ", np.mean(rec_list))
             print("Mutation probability (average): ", np.mean(mut_list))
 
-            #crowd_num = int(self.offspring_size / 10)
-            #rand_idx = np.random.choice(population.shape[0], crowd_num, replace=False)
-            #population_before_elimination = np.concatenate((population[rand_idx], offspring), axis=0)
+            # Crowding
+            #crowd_num = int(self.offspring_size / 10) # Crowding parameters
+            # Sort old population and pass only the best parents
+            #best_population = self.elimination(distanceMatrix, population, crowd_num) # Get 10% of best parents
+            #population_before_elimination = np.concatenate((population, offspring), axis=0)
             #population = self.crowding_elimination(distanceMatrix, population_before_elimination, crowd_num)
+
+            # (lambda+mu)
+            #population_before_elimination = np.concatenate((population, offspring), axis=0)
+            #population = self.elimination(distanceMatrix, population_before_elimination)
+
+            # (lambda,mu)
             population = self.elimination(distanceMatrix, offspring)
+
 
             population_fitnesses = [self.fitness(distanceMatrix, i) for i in population]
             meanObjective = np.mean(population_fitnesses)
@@ -114,7 +156,7 @@ class r0769473:
             idx_min = np.argmin(population_fitnesses)
             bestSolution = population[idx_min]
 
-            if i % 10 == 0:
+            if i % 1 == 0:
                 print("Mean objective: " + str(meanObjective))
                 print("Best objective: " + str(bestObjective))
             # print("Best solution: " + str(bestSolution))
@@ -179,10 +221,7 @@ class r0769473:
         dist = self.distance(individual, population[rand_idx]) # Opposite to correlation: close=small distance
         onePlusBeta = np.sum([1-(d)**alpha for d in dist if d >= sigma])
         fval = self.fitness(distance_matrix, individual)
-        #print(onePlusBeta, fval, fval + (fval * onePlusBeta**np.sign(fval)), fval * onePlusBeta**np.sign(fval), dist)
         return fval + (fval * onePlusBeta**np.sign(fval))
-        #print(onePlusBeta, fval, fval * onePlusBeta**np.sign(fval), dist)
-        #return max(fval, fval * onePlusBeta**np.sign(fval))
 
     def fitness(self, dist_matrix, individual):
         '''
@@ -199,15 +238,15 @@ class r0769473:
             return BIG_VALUE
         return sum(dist)
 
-    def get_mutation_prob(self, t):
-        return max(1-0.9*t/(self.max_iterations/2), 0.1)
+    #def get_mutation_prob(self, t):
+    #    return max(1-0.9*t/10, 0.1)
 
-    #def get_mutation_prob(self, f_avg, f_min, f, mut1=0.125, mut2=0.01):
-    #    if f <= f_avg:
-    #        mut_prob = mut1 - mut1 * (f - f_min) / (f_avg - f_min)
-    #    else:
-    #        mut_prob = mut2
-    #    return mut_prob
+    def get_mutation_prob(self, f_avg, f_min, f, mut1=0.5, mut2=0.05):
+        if f <= f_avg:
+            mut_prob = mut1 - mut1 * (f - f_min) / (f_avg - f_min)
+        else:
+            mut_prob = mut2
+        return mut_prob
 
     def get_recombination_prob(self, f_avg, f_min, f, rec1=0.9, rec2=0.6):
         if f <= f_avg:
@@ -382,7 +421,7 @@ class r0769473:
                     chromo.append(gene22)
         return np.array(chromo)
 
-    def elimination(self, distanceMatrix, population):
+    def elimination(self, distanceMatrix, population, survive_num=None):
         '''
         (lambda+mu)-elimination.
         :param population: (ndarray) the population of which individuals should be eliminated
@@ -390,7 +429,11 @@ class r0769473:
         :return: the surviving population
         '''
         idxs_sorted = np.argsort([self.fitness(distanceMatrix, i) for i in population])
-        surviving_idxs = idxs_sorted[:(self.offspring_size)]
+        if survive_num is not None:
+            surviving_idxs = idxs_sorted[:survive_num]
+        else:
+            surviving_idxs = idxs_sorted[:(self.offspring_size)]
+
         return population[surviving_idxs]
 
     # (l+m)-elimination
@@ -429,10 +472,12 @@ class r0769473:
     def cost_change(self, dist_matrix, n1, n2, n3, n4):
         return dist_matrix[n1, n3] + dist_matrix[n2, n4] - dist_matrix[n1, n2] - dist_matrix[n3, n4]
 
-    def two_opt(self, individual, dist_matrix):
-        best, improved = individual, True
-        while improved:
+
+    def two_opt(self, dist_matrix, individual):
+        best, improved, max_iter = individual, True, 0
+        while improved and max_iter < 5:
             improved = False
+            max_iter += 1
             for i in range(1, len(individual) - 2):
                 for j in range(i + 1, len(individual)):
                     if j - i == 1: continue
@@ -441,6 +486,15 @@ class r0769473:
                         improved = True
             individual = best
         return best
+
+    #def two_opt(self, dist_matrix, individual):
+    #    best = individual
+    #    for i in range(1, len(individual) - 2):
+    #        for j in range(i + 1, len(individual)):
+    #            if j - i == 1: continue
+    #            if self.cost_change(dist_matrix, best[i-1], best[i], best[j-1], best[j]) < 0:
+    #                best[i:j] = best[j - 1:i - 1:-1]
+    #    return best
 
     def should_continue(self, iterations, obj_values):
         '''
