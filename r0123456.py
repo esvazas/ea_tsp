@@ -1,30 +1,33 @@
-import Reporter
-import numpy as np
-import random
-import matplotlib.pyplot as plt
-from math import isinf
 import os
 import datetime
 import time
 import psutil
+import random
+
+import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
+
+from scipy.stats import kendalltau
+from math import isinf
+
+import Reporter
+
 
 # a constant of the big value we use instead of inf
 BIG_VALUE = 1.7976931348623157e+300
 
 # Modify the class name to match your student number.
 class r0769473:
-    k = 5  # k tournament size
-    mutation_probability = 0.75     # mutation probability
-    init_mutation_prob = 0.05       # initial mutation probability
+    k = 15  # k tournament size
     n = 10
 
     # Convergence parameters
-    conv_tolerance = 1e-6  # convergence tolerance
+    conv_tolerance = 1e-5  # convergence tolerance
     conv_el = 5  # elements to consider for checking
-    max_iterations = 100  # max iterations until stop
+    max_iterations = 50  # max iterations until stop
 
-    def __init__(self, mu=250, lam=1250, report_memory=False, create_convergence_plot=False,
+    def __init__(self, mu=2000, lam=400, report_memory=False, create_convergence_plot=False,
                  create_div_plot=False):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
         self.mem_recording = report_memory
@@ -32,6 +35,7 @@ class r0769473:
         self.diversity_plot = create_div_plot
         self.population_size = mu
         self.offspring_size = lam
+
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
@@ -89,7 +93,8 @@ class r0769473:
 
 
             for k in range(len(offspring)):
-                mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
+                #mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
+                mut_prob = self.get_mutation_prob(i)
                 mut_list.append(mut_prob)
                 if random.random() < mut_prob:
                     offspring[k] = self.mutation(offspring[k])
@@ -97,8 +102,11 @@ class r0769473:
             print("Recombination probability (average): ", np.mean(rec_list))
             print("Mutation probability (average): ", np.mean(mut_list))
 
-            population_before_elimination = np.concatenate((population, offspring), axis=0)
-            population = self.elimination(distanceMatrix, population_before_elimination)
+            #crowd_num = int(self.offspring_size / 10)
+            #rand_idx = np.random.choice(population.shape[0], crowd_num, replace=False)
+            #population_before_elimination = np.concatenate((population[rand_idx], offspring), axis=0)
+            #population = self.crowding_elimination(distanceMatrix, population_before_elimination, crowd_num)
+            population = self.elimination(distanceMatrix, offspring)
 
             population_fitnesses = [self.fitness(distanceMatrix, i) for i in population]
             meanObjective = np.mean(population_fitnesses)
@@ -162,6 +170,20 @@ class r0769473:
         # Your code here.
         return meanObjective, bestObjective, bestSolution, i, time.time() - start_time, max_memory
 
+    def distance(self, x, population):
+        return [(np.abs(kendalltau(x, pop)[0])) for pop in population] # Reverse correlation metric
+
+    def sharedFitness(self, distance_matrix, individual, population):
+        alpha, sigma = 0.1, 0.3
+        rand_idx = np.random.choice(population.shape[0], 10, replace=False)
+        dist = self.distance(individual, population[rand_idx]) # Opposite to correlation: close=small distance
+        onePlusBeta = np.sum([1-(d)**alpha for d in dist if d >= sigma])
+        fval = self.fitness(distance_matrix, individual)
+        #print(onePlusBeta, fval, fval + (fval * onePlusBeta**np.sign(fval)), fval * onePlusBeta**np.sign(fval), dist)
+        return fval + (fval * onePlusBeta**np.sign(fval))
+        #print(onePlusBeta, fval, fval * onePlusBeta**np.sign(fval), dist)
+        #return max(fval, fval * onePlusBeta**np.sign(fval))
+
     def fitness(self, dist_matrix, individual):
         '''
         Compute fitness: length
@@ -177,19 +199,36 @@ class r0769473:
             return BIG_VALUE
         return sum(dist)
 
-    def get_mutation_prob(self, f_avg, f_max, f, mut1=0.1, mut2=0.01):
-        if f <= f_avg:
-            mut_prob = mut1 - ((mut1 - mut2) * (f - f_max) / (f_avg-f_max))
-        else:
-            mut_prob = mut1
-        return mut_prob
+    def get_mutation_prob(self, t):
+        return max(1-0.9*t/(self.max_iterations/2), 0.1)
 
-    def get_recombination_prob(self, f_avg, f_max, f, rec1=0.7, rec2=0.3):
+    #def get_mutation_prob(self, f_avg, f_min, f, mut1=0.125, mut2=0.01):
+    #    if f <= f_avg:
+    #        mut_prob = mut1 - mut1 * (f - f_min) / (f_avg - f_min)
+    #    else:
+    #        mut_prob = mut2
+    #    return mut_prob
+
+    def get_recombination_prob(self, f_avg, f_min, f, rec1=0.9, rec2=0.6):
         if f <= f_avg:
-            rec_prob = rec1 - ((rec1 - rec2) * (f_avg-f) / (f_avg-f_max))
+            rec_prob = rec1 - ((rec1-rec2) * (f-f_min) / (f_avg-f_min))
         else:
-            rec_prob = rec1
+            rec_prob = rec2
         return rec_prob
+
+    #def get_mutation_prob(self, f_avg, f_max, f, mut1=0.1, mut2=0.001):
+    #    if f <= f_avg:
+    #        mut_prob = mut1 - ((mut1 - mut2) * (f - f_max) / (f_avg-f_max))
+    #    else:
+    #        mut_prob = mut1
+    #    return mut_prob
+
+    #def get_recombination_prob(self, f_avg, f_max, f, rec1=0.7, rec2=0.2):
+    #    if f <= f_avg:
+    #        rec_prob = rec1 - ((rec1 - rec2) * (f_avg-f) / (f_avg-f_max))
+    #    else:
+    #        rec_prob = rec1
+    #    return rec_prob
 
     def initialization(self):
         '''
@@ -216,6 +255,7 @@ class r0769473:
         selected_idx = np.random.choice(population.shape[0], self.k, replace=False)
         selected = population[selected_idx]
         fitness_values = [self.fitness(dist_matrix, s) for s in selected]
+        #fitness_values = [self.sharedFitness(dist_matrix, s, population) for s in selected]
         min_idx = np.argmin(fitness_values)
         return selected[min_idx]
 
@@ -342,8 +382,6 @@ class r0769473:
                     chromo.append(gene22)
         return np.array(chromo)
 
-    # (l+m)-elimination
-    # returns a new population with only the survivors
     def elimination(self, distanceMatrix, population):
         '''
         (lambda+mu)-elimination.
@@ -352,8 +390,57 @@ class r0769473:
         :return: the surviving population
         '''
         idxs_sorted = np.argsort([self.fitness(distanceMatrix, i) for i in population])
-        surviving_idxs = idxs_sorted[:self.offspring_size]
+        surviving_idxs = idxs_sorted[:(self.offspring_size)]
         return population[surviving_idxs]
+
+    # (l+m)-elimination
+    # returns a new population with only the survivors
+    def crowding_elimination(self, distanceMatrix, population, crowd_num):
+        '''
+        (lambda+mu)-elimination.
+        :param population: (ndarray) the population of which individuals should be eliminated
+        :param distanceMatrix: (ndarray) the distance matrix
+        :return: the surviving population
+        '''
+        idxs_sorted = np.argsort([self.fitness(distanceMatrix, i) for i in population])
+        surviving_idxs = idxs_sorted[:(self.offspring_size + crowd_num)]
+        surviving_idxs = self.get_crowding_elements(distanceMatrix, population, surviving_idxs, crowd_num)
+        return population[surviving_idxs]
+
+    def get_crowding_elements(self, dist_matrix, population, promoted_idx, crowd_num, k=10):
+        # Random crowding indices
+        crowd_indices = np.random.choice(promoted_idx, crowd_num, replace=False)
+        # Closest elements to crowding elements
+        crowd_closest_idx = []
+        # k-tournament selection for each crowd element
+        # Find closest from randomly selected elements
+        for c_idx in crowd_indices:
+            rand_idx = np.random.choice(np.setdiff1d(promoted_idx, np.union1d(c_idx, crowd_closest_idx)), k, replace=False)
+            selected = population[rand_idx]
+            crowd_el = population[c_idx]
+            dist = self.distance(crowd_el, selected)  # correlation: large=small distance
+            crowd_closest_idx.append(rand_idx[np.argmax(dist)])
+
+        # Remove closest elements from promoted_idx list
+        mask = np.ones(len(promoted_idx), dtype=bool)
+        mask[crowd_closest_idx] = False
+        return promoted_idx[mask]
+
+    def cost_change(self, dist_matrix, n1, n2, n3, n4):
+        return dist_matrix[n1, n3] + dist_matrix[n2, n4] - dist_matrix[n1, n2] - dist_matrix[n3, n4]
+
+    def two_opt(self, individual, dist_matrix):
+        best, improved = individual, True
+        while improved:
+            improved = False
+            for i in range(1, len(individual) - 2):
+                for j in range(i + 1, len(individual)):
+                    if j - i == 1: continue
+                    if self.cost_change(dist_matrix, best[i-1], best[i], best[j-1], best[j]) < 0:
+                        best[i:j] = best[j - 1:i - 1:-1]
+                        improved = True
+            individual = best
+        return best
 
     def should_continue(self, iterations, obj_values):
         '''
@@ -426,19 +513,3 @@ if plot_variance:
     plt.xlabel("runs")
     plt.ylabel("best objective value")
     plt.savefig("variance_plot.png")
-
-# code of Erikas
-'''
-lam_options = [50, 100, 150, 250, 500]
-plt.figure()
-for lam in lam_options:
-    instance = r0123456(lam=lam)
-    mean_objective, best_objective, best_solution = instance.optimize(filename='tour29.csv')
-plt.legend()
-plt.xlabel("iterations")
-plt.ylabel("best fitness value")
-plt.show()
-print("Mean objective: " + str(mean_objective))
-print("Best objective: " + str(best_objective))
-print("Best solution: " + str(best_solution))
-'''
