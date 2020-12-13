@@ -20,11 +20,11 @@ BIG_VALUE = 1.7976931348623157e+300
 
 # Modify the class name to match your student number.
 class r0769473:
-    k = 15  # k tournament size
+    k = 5  # k tournament size
     n = 10
 
     # Convergence parameters
-    conv_tolerance = 1e-5  # convergence tolerance
+    conv_tolerance = 1e-6  # convergence tolerance
     conv_el = 5  # elements to consider for checking
     max_iterations = 50  # max iterations until stop
 
@@ -61,7 +61,7 @@ class r0769473:
         print("Best objective: " + str(bestObjective))
 
         start_time = time.time()
-        pop_idx = np.random.choice(population.shape[0], min(self.population_size, 100), replace=False)
+        pop_idx = np.random.choice(population.shape[0], min(self.population_size, 50), replace=False)
         population[pop_idx] = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(population[pop_idx])], dtype=np.uint16)
         print("2-opt required time: ", time.time() - start_time, population.shape)
 
@@ -86,7 +86,8 @@ class r0769473:
             pid = os.getpid()
         start_time = time.time()
 
-        while self.should_continue(i, obj_values):
+        two_opt_executed = False
+        while self.should_continue(i, obj_values, two_opt_executed):
             print(i)
 
             # Your code here.
@@ -107,8 +108,12 @@ class r0769473:
                 #offspring[j+1] = child2
 
                 for rec_i in range(2):
-                    parent1 = self.selection(distanceMatrix, population)
-                    parent2 = self.selection(distanceMatrix, population)
+                    #if i in [0,1,2,3]:
+                    #    parent1 = self.selection(distanceMatrix, population, use_shared=True)
+                    #    parent2 = self.selection(distanceMatrix, population, use_shared=True)
+                    #else:
+                    parent1 = self.selection(distanceMatrix, population, use_shared=False)
+                    parent2 = self.selection(distanceMatrix, population, use_shared=False)
                     rec_prob = self.get_recombination_prob(meanObjective, bestObjective, min(
                         self.fitness(distanceMatrix, parent1), self.fitness(distanceMatrix, parent2)))
                     rec_list.append(rec_prob)
@@ -120,26 +125,36 @@ class r0769473:
                         offspring[j+rec_i] = parent1 if self.fitness(distanceMatrix, parent1) <= self.fitness(distanceMatrix, parent2) else parent2
 
             # Apply 2-opt for local search
-            start_time = time.time()
-            off_idx = np.random.choice(offspring.shape[0], min(self.offspring_size, 50) , replace=False)
-            offspring[off_idx] = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(offspring[off_idx])], dtype=np.uint16)
-            print("2-opt required time: ", time.time() - start_time, population.shape)
+            #start_time = time.time()
+            #if i in [0,1,2,3]:
+            #    off_idx = np.random.choice(offspring.shape[0], min(self.offspring_size, self.offspring_size) , replace=False)
+            #else:
+            #    off_idx = np.random.choice(offspring.shape[0], min(self.offspring_size, 50) , replace=False)
+            #offspring[off_idx] = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(offspring[off_idx])], dtype=np.uint16)
+            #print("2-opt required time: ", time.time() - start_time, population.shape)
 
             for k in range(len(offspring)):
-                mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
-                #mut_prob = self.get_mutation_prob(i)
+                #mut_prob = self.get_mutation_prob(meanObjective, bestObjective, self.fitness(distanceMatrix, offspring[k]))
+                mut_prob = self.get_mutation_prob(i)
                 mut_list.append(mut_prob)
                 if random.random() < mut_prob:
                     offspring[k] = self.mutation(offspring[k])
+
+            if i >= 5:
+                start_time = time.time()
+                off_idx = np.random.choice(offspring.shape[0], min(50, self.offspring_size), replace=False)
+                offspring[off_idx] = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(offspring[off_idx])], dtype=np.uint16)
+                two_opt_executed = True
+                print("2-opt required time: ", time.time() - start_time, population.shape)
 
             print("Recombination probability (average): ", np.mean(rec_list))
             print("Mutation probability (average): ", np.mean(mut_list))
 
             # Crowding
-            #crowd_num = int(self.offspring_size / 10) # Crowding parameters
+            #crowd_num = int(self.offspring_size / 3) # Crowding parameters
             # Sort old population and pass only the best parents
             #best_population = self.elimination(distanceMatrix, population, crowd_num) # Get 10% of best parents
-            #population_before_elimination = np.concatenate((population, offspring), axis=0)
+            #population_before_elimination = np.concatenate((best_population, offspring), axis=0)
             #population = self.crowding_elimination(distanceMatrix, population_before_elimination, crowd_num)
 
             # (lambda+mu)
@@ -192,6 +207,17 @@ class r0769473:
 
             i += 1
 
+        # Apply k-opt after all GA
+        #start_time = time.time()
+        #population = np.array([self.two_opt(distanceMatrix, i) for i in tqdm(population)], dtype=np.uint16)
+        #print("2-opt required time: ", time.time() - start_time, population.shape)
+        # Evaluation of population after k-opt local search
+        #population_fitnesses = [self.fitness(distanceMatrix, i) for i in population]
+        #meanObjective = np.mean(population_fitnesses)
+        #bestObjective = np.min(population_fitnesses)
+        #print("Mean objective: " + str(meanObjective))
+        #print("Best objective: " + str(bestObjective))
+
         # Plot the diversity plot if needed
         if self.diversity_plot:
             plt.figure()
@@ -215,13 +241,16 @@ class r0769473:
     def distance(self, x, population):
         return [(np.abs(kendalltau(x, pop)[0])) for pop in population] # Reverse correlation metric
 
+    def manhattan_distance(self, a, population):
+        return [sum(abs(a-pop)) for pop in population]
+
     def sharedFitness(self, distance_matrix, individual, population):
-        alpha, sigma = 0.1, 0.3
-        rand_idx = np.random.choice(population.shape[0], 10, replace=False)
-        dist = self.distance(individual, population[rand_idx]) # Opposite to correlation: close=small distance
-        onePlusBeta = np.sum([1-(d)**alpha for d in dist if d >= sigma])
+        alpha, sigma = 0.1, individual.size**2/3
+        rand_idx = np.random.choice(population.shape[0], int(population.shape[0]/2), replace=False)
+        dist = self.manhattan_distance(individual.astype(np.int32), population[rand_idx].astype(np.int32))
+        onePlusBeta = np.sum([1 - (d / sigma) ** alpha for d in dist if d <= sigma])
         fval = self.fitness(distance_matrix, individual)
-        return fval + (fval * onePlusBeta**np.sign(fval))
+        return max(fval * onePlusBeta**np.sign(fval), fval)
 
     def fitness(self, dist_matrix, individual):
         '''
@@ -238,15 +267,16 @@ class r0769473:
             return BIG_VALUE
         return sum(dist)
 
-    #def get_mutation_prob(self, t):
-    #    return max(1-0.9*t/10, 0.1)
+    def get_mutation_prob(self, t):
+        return max(1-0.9*t/10, 0.1)
+        #return 0.5
 
-    def get_mutation_prob(self, f_avg, f_min, f, mut1=0.5, mut2=0.05):
-        if f <= f_avg:
-            mut_prob = mut1 - mut1 * (f - f_min) / (f_avg - f_min)
-        else:
-            mut_prob = mut2
-        return mut_prob
+    #def get_mutation_prob(self, f_avg, f_min, f, mut1=0.5, mut2=0.05):
+    #    if f <= f_avg:
+    #        mut_prob = mut1 - mut1 * (f - f_min) / (f_avg - f_min)
+    #    else:
+    #        mut_prob = mut2
+    #    return mut_prob
 
     def get_recombination_prob(self, f_avg, f_min, f, rec1=0.9, rec2=0.6):
         if f <= f_avg:
@@ -281,7 +311,7 @@ class r0769473:
             population[i] = individual
         return population
 
-    def selection(self, dist_matrix, population, k=5):
+    def selection(self, dist_matrix, population, use_shared=False):
         '''
         k-tournament selection.
         :param dist_matrix: (np.ndarray)
@@ -293,8 +323,10 @@ class r0769473:
         # print(population.shape[0])
         selected_idx = np.random.choice(population.shape[0], self.k, replace=False)
         selected = population[selected_idx]
-        fitness_values = [self.fitness(dist_matrix, s) for s in selected]
-        #fitness_values = [self.sharedFitness(dist_matrix, s, population) for s in selected]
+        if use_shared:
+            fitness_values = [self.sharedFitness(dist_matrix, s, population) for s in selected]
+        else:
+            fitness_values = [self.fitness(dist_matrix, s) for s in selected]
         min_idx = np.argmin(fitness_values)
         return selected[min_idx]
 
@@ -315,6 +347,28 @@ class r0769473:
         else:
             individual[idxs[1]:idxs[0]] = np.flip(individual[idxs[1]:idxs[0]])
         return individual
+
+    def change_position(self, individual, pick_idx, put_idx):
+        put_idxs = list(range(put_idx, put_idx + len(pick_idx)))
+        orig_data = individual.copy()
+        data = np.insert(individual, put_idx, individual[pick_idx])
+        possible_idx = [np.where(data == orig_data[i])[0] for i in pick_idx]
+        delete_idx = [i[0] if i[0] not in put_idxs else i[1] for i in possible_idx]
+        return np.delete(data, delete_idx)
+
+    def inverted_displacement_mutation(self, individual):
+        idxs = np.random.randint(0, self.n + 1, 2)
+        if (idxs[0] <= idxs[1]):
+            pick_idxs = list(range(idxs[0], idxs[1], 1))
+            individual[idxs[0]:idxs[1]] = np.flip(individual[idxs[0]:idxs[1]])
+        else:
+            pick_idxs = list(range(idxs[1], idxs[0], 1))
+            individual[idxs[1]:idxs[0]] = np.flip(individual[idxs[1]:idxs[0]])
+
+        idx = np.random.randint(0, self.n + 1, 1)
+        individual = self.change_position(individual, pick_idxs, idx)
+        return individual
+
 
     # Order recombination
     # returns one child or child1 and child2 (as a tuple)
@@ -447,27 +501,24 @@ class r0769473:
         '''
         idxs_sorted = np.argsort([self.fitness(distanceMatrix, i) for i in population])
         surviving_idxs = idxs_sorted[:(self.offspring_size + crowd_num)]
-        surviving_idxs = self.get_crowding_elements(distanceMatrix, population, surviving_idxs, crowd_num)
-        return population[surviving_idxs]
+        pop_crowded = self.remove_similar_individuals(population[surviving_idxs], crowd_num)
+        return pop_crowded
 
-    def get_crowding_elements(self, dist_matrix, population, promoted_idx, crowd_num, k=10):
+    def remove_similar_individuals(self, population, crowd_num, k=30):
         # Random crowding indices
-        crowd_indices = np.random.choice(promoted_idx, crowd_num, replace=False)
+        crowd_indices = np.random.choice(range(population.shape[0]), crowd_num, replace=False)
         # Closest elements to crowding elements
         crowd_closest_idx = []
-        # k-tournament selection for each crowd element
-        # Find closest from randomly selected elements
         for c_idx in crowd_indices:
-            rand_idx = np.random.choice(np.setdiff1d(promoted_idx, np.union1d(c_idx, crowd_closest_idx)), k, replace=False)
-            selected = population[rand_idx]
-            crowd_el = population[c_idx]
-            dist = self.distance(crowd_el, selected)  # correlation: large=small distance
+            rand_idx = np.random.choice(np.setdiff1d(range(population.shape[0]), np.union1d(c_idx, crowd_closest_idx)),
+                                        k, replace=False)
+            dist = self.distance(population[c_idx], population[rand_idx])  # correlation: large=small distance
             crowd_closest_idx.append(rand_idx[np.argmax(dist)])
 
         # Remove closest elements from promoted_idx list
-        mask = np.ones(len(promoted_idx), dtype=bool)
+        mask = np.ones(population.shape[0], dtype=bool)
         mask[crowd_closest_idx] = False
-        return promoted_idx[mask]
+        return population[mask]
 
     def cost_change(self, dist_matrix, n1, n2, n3, n4):
         return dist_matrix[n1, n3] + dist_matrix[n2, n4] - dist_matrix[n1, n2] - dist_matrix[n3, n4]
@@ -496,7 +547,7 @@ class r0769473:
     #                best[i:j] = best[j - 1:i - 1:-1]
     #    return best
 
-    def should_continue(self, iterations, obj_values):
+    def should_continue(self, iterations, obj_values, two_opt_executed):
         '''
         Define algorithm stop conditions based on:
         1. Exceeded number of iterations
@@ -512,7 +563,7 @@ class r0769473:
             still_converging = True
         else:
             still_converging = np.abs(obj_values[0] - previous_mean) >= self.conv_tolerance * previous_mean
-        return iterations <= self.max_iterations and still_converging
+        return iterations <= self.max_iterations and still_converging or not two_opt_executed
 
 
 # Parameters you can change to
