@@ -1,5 +1,6 @@
 # How to solve TSP?
 Implementation of Evolutionary Algorithm to solve famous Travelling Salesman Problem.
+
 The code:
 * was written for Genetic Algorithms and Evolutionary Computing course at KU Leuven, 2020. 
 * was considered among Top-15% best implementations for the competition among ~100 students.
