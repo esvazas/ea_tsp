@@ -2,10 +2,10 @@
 Implementation of Evolutionary Algorithm to solve famous Travelling Salesman Problem.
 The code:
 * was written for Genetic Algorithms and Evolutionary Computing course at KU Leuven, 2020. 
-* was considered among Top-15 percent best implementations for the competition among ~100 students.
+* was considered among Top-15% best implementations for the competition among ~100 students.
 * was implemented to solve large TSP tasks (~1000 cities) within 5 minutes timeframe.
 
-The full project report containing the details of implementation, comparison of results with respect to greedy heuristic solutions, and possible modifications can be accessed in report.pdf file. Implementation was initially constrained only to a single python file to allow for comparison on unseen datasets with respect to other students.
+The full project report containing the details of implementation, comparison of results with respect to greedy heuristic solutions, and possible modifications can be accessed in *report.pdf* file. Implementation was initially constrained only to a single python file to allow for comparison on unseen datasets with respect to other students.
  
 ## Experiments content
 * data - directory containing two example datasets which include 29 and 100 cities.
