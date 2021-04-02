@@ -8,11 +8,6 @@ The code:
 
 The full project report containing the details of implementation, comparison of results with respect to greedy heuristic solutions, and possible modifications can be accessed in *report.pdf* file. Implementation was initially constrained only to a single python file to allow for comparison on unseen datasets with respect to other students.
 
-## Experiments content
-* data - directory containing two example datasets which include 29 and 100 cities.
-* solver - directory containing EA implementation and Reporter class.  
-* result - directory containing solutions.
-
 ## Directory tree
 ```bash
 data
@@ -26,6 +21,11 @@ solver
    |-- Reporter.py
    |-- solver.py
 ```  
+
+## Directory content
+* data - directory containing two example datasets which include 29 and 100 cities.
+* solver - directory containing EA implementation and Reporter class.  
+* result - directory containing solutions.
 
 ## Requirements
 ```
