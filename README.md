@@ -7,11 +7,25 @@ The code:
 * was implemented to solve large TSP tasks (~1000 cities) within 5 minutes timeframe.
 
 The full project report containing the details of implementation, comparison of results with respect to greedy heuristic solutions, and possible modifications can be accessed in *report.pdf* file. Implementation was initially constrained only to a single python file to allow for comparison on unseen datasets with respect to other students.
- 
+
 ## Experiments content
 * data - directory containing two example datasets which include 29 and 100 cities.
 * solver - directory containing EA implementation and Reporter class.  
 * result - directory containing solutions.
+
+## Directory tree
+```bash
+data
+   |-- tour100.csv
+   |-- tour29.csv
+main.py
+report.pdf
+result
+   |-- tsp_result.csv
+solver
+   |-- Reporter.py
+   |-- solver.py
+```  
 
 ## Requirements
 ```
