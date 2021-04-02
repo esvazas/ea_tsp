@@ -13,13 +13,13 @@ The full project report containing the details of implementation, comparison of 
 data
    |-- tour100.csv
    |-- tour29.csv
-main.py
-report.pdf
 result
    |-- tsp_result.csv
 solver
    |-- Reporter.py
    |-- solver.py
+main.py
+report.pdf
 ```  
 
 ## Directory content
